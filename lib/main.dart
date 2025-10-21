@@ -38,6 +38,15 @@ class TaskApp extends StatelessWidget {
   }
 }
 
+class Task {
+  String name;
+  bool isDone;
+  Task({required this.name, this.isDone = false});
+}
+
+enum TaskFilter { all, active, done }
+
+
 class TaskListScreen extends StatefulWidget {
   const TaskListScreen({super.key});
   @override
@@ -45,11 +54,75 @@ class TaskListScreen extends StatefulWidget {
 }
 
 class _TaskListScreenState extends State<TaskListScreen> {
+  final TextEditingController _controller = TextEditingController();
+  final List<Task> _tasks = [];
+  TaskFilter _filter = TaskFilter.all;
+
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      appBar: AppBar(title: Text('Tasks', style: TextStyle(fontWeight: FontWeight.w600))),
-      body: Center(child: Text('Scaffold ready')),
+    return Scaffold(
+      appBar: const AppBar(
+        title: Text('Tasks', style: TextStyle(fontWeight: FontWeight.w600)),
+      ),
+      body: const Padding(
+        padding: EdgeInsets.fromLTRB(16, 12, 16, 90),
+        child: _EmptyState(),
+      ),
+      bottomSheet: SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+          decoration: const BoxDecoration(
+            color: Color(0xFF0F1115),
+            border: Border(top: BorderSide(color: Color(0xFF2A313B), width: 1)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _controller,
+                  textInputAction: TextInputAction.done,
+                  decoration: const InputDecoration(hintText: 'Add a new task…'),
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ),
+              const SizedBox(width: 10),
+              const FilledButton.icon(
+                onPressed: null, // will wire up in next commit
+                icon: Icon(Icons.add),
+                label: Text('Add'),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Opacity(
+        opacity: 0.9,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.hourglass_empty, size: 48, color: Colors.white70),
+            const SizedBox(height: 8),
+            Text(
+              'No tasks yet',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white),
+            ),
+            const SizedBox(height: 4),
+            const Text('Add one using the bar below', style: TextStyle(color: Colors.white70)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
