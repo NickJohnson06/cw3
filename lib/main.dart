@@ -1,36 +1,36 @@
 import 'package:flutter/material.dart';
+import 'theme/app_theme.dart'; // <-- new import
 
 void main() => runApp(const TaskApp());
 
-class TaskApp extends StatelessWidget {
+class TaskApp extends StatefulWidget {
   const TaskApp({super.key});
+
+  @override
+  State<TaskApp> createState() => _TaskAppState();
+}
+
+class _TaskAppState extends State<TaskApp> {
+  ThemeMode _themeMode = ThemeMode.system;
+
+  void _toggleTheme() {
+    setState(() {
+      _themeMode = cycleTheme(_themeMode);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Tasks',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: Colors.amber,
-        scaffoldBackgroundColor: const Color(0xFF0F1115),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF0F1115),
-          foregroundColor: Colors.white,
-          elevation: 0,
-        ),
-        inputDecorationTheme: const InputDecorationTheme(
-          filled: true,
-          fillColor: Color(0xFF1A1F27),
-          border: OutlineInputBorder(borderSide: BorderSide.none, borderRadius: BorderRadius.all(Radius.circular(12))),
-          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        ),
-        listTileTheme: const ListTileThemeData(
-          iconColor: Colors.white70,
-          textColor: Colors.white,
-        ),
+      theme: lightTheme,
+      darkTheme: darkTheme,
+      themeMode: _themeMode,
+      home: TaskListScreen(
+        themeMode: _themeMode,
+        onToggleTheme: _toggleTheme,
       ),
-      home: const TaskListScreen(),
     );
   }
 }
@@ -44,7 +44,14 @@ class Task {
 enum TaskFilter { all, active, done }
 
 class TaskListScreen extends StatefulWidget {
-  const TaskListScreen({super.key});
+  final ThemeMode themeMode;
+  final VoidCallback onToggleTheme;
+
+  const TaskListScreen({
+    super.key,
+    required this.themeMode,
+    required this.onToggleTheme,
+  });
 
   @override
   State<TaskListScreen> createState() => _TaskListScreenState();
@@ -107,21 +114,44 @@ class _TaskListScreenState extends State<TaskListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final chipStyle = Theme.of(context).textTheme.labelLarge?.copyWith(color: Colors.white);
+    final chipStyle = Theme.of(context).textTheme.labelLarge?.copyWith(
+          color: Theme.of(context).brightness == Brightness.dark
+              ? Colors.white
+              : Colors.black,
+        );
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Tasks', style: TextStyle(fontWeight: FontWeight.w600)),
         actions: [
+          // Theme toggle icon
+          IconButton(
+            tooltip: 'Toggle Theme',
+            icon: Icon(themeIconFor(widget.themeMode)),
+            onPressed: widget.onToggleTheme,
+          ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: SegmentedButton<TaskFilter>(
               style: ButtonStyle(
                 backgroundColor: WidgetStateProperty.resolveWith((states) {
-                  if (states.contains(WidgetState.selected)) return const Color(0xFF2A313B);
-                  return const Color(0xFF1A1F27);
+                  final isDark =
+                      Theme.of(context).brightness == Brightness.dark;
+                  if (states.contains(WidgetState.selected)) {
+                    return isDark
+                        ? const Color(0xFF2A313B)
+                        : Colors.amber.shade100;
+                  }
+                  return isDark
+                      ? const Color(0xFF1A1F27)
+                      : Colors.grey.shade200;
                 }),
                 side: WidgetStateProperty.all(BorderSide.none),
-                foregroundColor: WidgetStateProperty.all(Colors.white),
+                foregroundColor: WidgetStateProperty.all(
+                  Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white
+                      : Colors.black,
+                ),
                 textStyle: WidgetStateProperty.all(chipStyle),
               ),
               segments: const [
@@ -150,7 +180,9 @@ class _TaskListScreenState extends State<TaskListScreen> {
                 itemBuilder: (context, i) {
                   final realIdx = _realIndex(i);
                   final task = _tasks[realIdx];
-                  final leftStripe = task.isDone ? Colors.greenAccent : Colors.amber;
+                  final leftStripe = task.isDone
+                      ? Colors.greenAccent
+                      : Theme.of(context).colorScheme.secondary;
 
                   return Dismissible(
                     key: ValueKey(task),
@@ -167,7 +199,9 @@ class _TaskListScreenState extends State<TaskListScreen> {
                     onDismissed: (_) => _deleteTask(realIdx),
                     child: DecoratedBox(
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1A1F27),
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? const Color(0xFF1A1F27)
+                            : Colors.grey.shade100,
                         borderRadius: BorderRadius.circular(12),
                         border: Border(
                           left: BorderSide(color: leftStripe, width: 4),
@@ -182,8 +216,9 @@ class _TaskListScreenState extends State<TaskListScreen> {
                         title: Text(
                           task.name,
                           style: TextStyle(
-                            color: Colors.white,
-                            decoration: task.isDone ? TextDecoration.lineThrough : TextDecoration.none,
+                            decoration: task.isDone
+                                ? TextDecoration.lineThrough
+                                : TextDecoration.none,
                           ),
                         ),
                         trailing: IconButton(
@@ -203,9 +238,11 @@ class _TaskListScreenState extends State<TaskListScreen> {
         top: false,
         child: Container(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-          decoration: const BoxDecoration(
-            color: Color(0xFF0F1115),
-            border: Border(top: BorderSide(color: Color(0xFF2A313B), width: 1)),
+          decoration: BoxDecoration(
+            color: Theme.of(context).appBarTheme.backgroundColor,
+            border: const Border(
+              top: BorderSide(color: Color(0xFF2A313B), width: 1),
+            ),
           ),
           child: Row(
             children: [
@@ -217,7 +254,6 @@ class _TaskListScreenState extends State<TaskListScreen> {
                   decoration: const InputDecoration(
                     hintText: 'Add a new task…',
                   ),
-                  style: const TextStyle(color: Colors.white),
                 ),
               ),
               const SizedBox(width: 10),
@@ -245,14 +281,14 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.hourglass_empty, size: 48, color: Colors.white70),
+            const Icon(Icons.hourglass_empty, size: 48),
             const SizedBox(height: 8),
             Text(
               'No tasks yet',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white),
+              style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 4),
-            const Text('Add one using the bar below', style: TextStyle(color: Colors.white70)),
+            const Text('Add one using the bar below'),
           ],
         ),
       ),
