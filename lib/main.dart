@@ -58,16 +58,81 @@ class _TaskListScreenState extends State<TaskListScreen> {
   final List<Task> _tasks = [];
   TaskFilter _filter = TaskFilter.all;
 
+  void _addTask() {
+  final text = _controller.text.trim();
+  if (text.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Please enter a task')),
+    );
+    return;
+  }
+  setState(() {
+    _tasks.add(Task(name: text));
+    _controller.clear();
+  });
+}
+
+void _toggleTask(int index, bool? value) {
+  setState(() {
+    _tasks[index].isDone = value ?? false;
+  });
+}
+
+void _deleteTask(int index) {
+  final removed = _tasks[index];
+  setState(() {
+    _tasks.removeAt(index);
+  });
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text('Deleted: ${removed.name}')),
+  );
+}
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: const AppBar(
         title: Text('Tasks', style: TextStyle(fontWeight: FontWeight.w600)),
       ),
-      body: const Padding(
-        padding: EdgeInsets.fromLTRB(16, 12, 16, 90),
-        child: _EmptyState(),
+      body: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
+        child: _tasks.isEmpty
+            ? const _EmptyState()
+            : ListView.separated(
+                itemCount: _tasks.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 10),
+                itemBuilder: (context, index) {
+                  final task = _tasks[index];
+                  return DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1A1F27),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: ListTile(
+                      leading: Checkbox(
+                        value: task.isDone,
+                        onChanged: (val) => _toggleTask(index, val),
+                        shape: const CircleBorder(),
+                      ),
+                      title: Text(
+                        task.name,
+                        style: TextStyle(
+                          color: Colors.white,
+                          decoration: task.isDone ? TextDecoration.lineThrough : TextDecoration.none,
+                        ),
+                      ),
+                      trailing: IconButton(
+                        tooltip: 'Delete',
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: () => _deleteTask(index),
+                      ),
+                    ),
+                  );
+                },
+              ),
       ),
+
       bottomSheet: SafeArea(
         top: false,
         child: Container(
@@ -87,10 +152,10 @@ class _TaskListScreenState extends State<TaskListScreen> {
                 ),
               ),
               const SizedBox(width: 10),
-              const FilledButton.icon(
-                onPressed: null, // will wire up in next commit
-                icon: Icon(Icons.add),
-                label: Text('Add'),
+              FilledButton.icon(
+                onPressed: _addTask,
+                icon: const Icon(Icons.add),
+                label: const Text('Add'),
               ),
             ],
           ),
