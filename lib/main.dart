@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'theme/app_theme.dart'; // <-- new import
+import 'theme/app_theme.dart';
+import 'storage/storage_helper.dart';
 
 void main() => runApp(const TaskApp());
 
@@ -13,10 +14,22 @@ class TaskApp extends StatefulWidget {
 class _TaskAppState extends State<TaskApp> {
   ThemeMode _themeMode = ThemeMode.system;
 
+  @override
+  void initState() {
+    super.initState();
+    _initTheme();
+  }
+
+  Future<void> _initTheme() async {
+    final mode = await LocalStore.loadThemeMode();
+    if (!mounted) return;
+    setState(() => _themeMode = mode);
+  }
+
   void _toggleTheme() {
-    setState(() {
-      _themeMode = cycleTheme(_themeMode);
-    });
+    final next = cycleTheme(_themeMode);
+    setState(() => _themeMode = next);
+    LocalStore.saveThemeMode(next);
   }
 
   @override
@@ -39,6 +52,10 @@ class Task {
   String name;
   bool isDone;
   Task({required this.name, this.isDone = false});
+
+  Map<String, dynamic> toJson() => {'n': name, 'd': isDone};
+  factory Task.fromJson(Map<String, dynamic> json) =>
+      Task(name: (json['n'] ?? '').toString(), isDone: (json['d'] ?? false) as bool);
 }
 
 enum TaskFilter { all, active, done }
@@ -61,8 +78,28 @@ class _TaskListScreenState extends State<TaskListScreen> {
   final TextEditingController _controller = TextEditingController();
   final List<Task> _tasks = [];
   TaskFilter _filter = TaskFilter.all;
+  bool _loading = true;
 
-  // Actions
+  @override
+  void initState() {
+    super.initState();
+    _loadTasks();
+  }
+
+  Future<void> _loadTasks() async {
+    final raw = await LocalStore.loadTasksRaw();
+    setState(() {
+      _tasks
+        ..clear()
+        ..addAll(raw.map((m) => Task.fromJson(m)));
+      _loading = false;
+    });
+  }
+
+  Future<void> _saveTasks() async {
+    await LocalStore.saveTasksRaw(_tasks.map((t) => t.toJson()).toList());
+  }
+
   void _addTask() {
     final text = _controller.text.trim();
     if (text.isEmpty) {
@@ -75,25 +112,23 @@ class _TaskListScreenState extends State<TaskListScreen> {
       _tasks.add(Task(name: text));
       _controller.clear();
     });
+    _saveTasks();
   }
 
   void _toggleTask(int index, bool? value) {
-    setState(() {
-      _tasks[index].isDone = value ?? false;
-    });
+    setState(() => _tasks[index].isDone = value ?? false);
+    _saveTasks();
   }
 
   void _deleteTask(int index) {
     final removed = _tasks[index];
-    setState(() {
-      _tasks.removeAt(index);
-    });
+    setState(() => _tasks.removeAt(index));
+    _saveTasks();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Deleted: ${removed.name}')),
     );
   }
 
-  // Derived view
   List<Task> get _visibleTasks {
     switch (_filter) {
       case TaskFilter.active:
@@ -106,7 +141,6 @@ class _TaskListScreenState extends State<TaskListScreen> {
     }
   }
 
-  // Map visible index to real index
   int _realIndex(int visibleIndex) {
     final current = _visibleTasks[visibleIndex];
     return _tasks.indexOf(current);
@@ -114,17 +148,16 @@ class _TaskListScreenState extends State<TaskListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final chipStyle = Theme.of(context).textTheme.labelLarge?.copyWith(
-          color: Theme.of(context).brightness == Brightness.dark
-              ? Colors.white
-              : Colors.black,
-        );
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final chipStyle = Theme.of(context)
+        .textTheme
+        .labelLarge
+        ?.copyWith(color: isDark ? Colors.white : Colors.black);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Tasks', style: TextStyle(fontWeight: FontWeight.w600)),
         actions: [
-          // Theme toggle icon
           IconButton(
             tooltip: 'Toggle Theme',
             icon: Icon(themeIconFor(widget.themeMode)),
@@ -135,23 +168,14 @@ class _TaskListScreenState extends State<TaskListScreen> {
             child: SegmentedButton<TaskFilter>(
               style: ButtonStyle(
                 backgroundColor: WidgetStateProperty.resolveWith((states) {
-                  final isDark =
-                      Theme.of(context).brightness == Brightness.dark;
                   if (states.contains(WidgetState.selected)) {
-                    return isDark
-                        ? const Color(0xFF2A313B)
-                        : Colors.amber.shade100;
+                    return isDark ? const Color(0xFF2A313B) : Colors.amber.shade100;
                   }
-                  return isDark
-                      ? const Color(0xFF1A1F27)
-                      : Colors.grey.shade200;
+                  return isDark ? const Color(0xFF1A1F27) : Colors.grey.shade200;
                 }),
                 side: WidgetStateProperty.all(BorderSide.none),
-                foregroundColor: WidgetStateProperty.all(
-                  Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white
-                      : Colors.black,
-                ),
+                foregroundColor:
+                    WidgetStateProperty.all(isDark ? Colors.white : Colors.black),
                 textStyle: WidgetStateProperty.all(chipStyle),
               ),
               segments: const [
@@ -160,9 +184,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
                 ButtonSegment(value: TaskFilter.done, label: Text('Done')),
               ],
               selected: <TaskFilter>{_filter},
-              onSelectionChanged: (sel) {
-                setState(() => _filter = sel.first);
-              },
+              onSelectionChanged: (sel) => setState(() => _filter = sel.first),
               showSelectedIcon: false,
               multiSelectionEnabled: false,
             ),
@@ -172,65 +194,64 @@ class _TaskListScreenState extends State<TaskListScreen> {
 
       body: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
-        child: _tasks.isEmpty
-            ? const _EmptyState()
-            : ListView.separated(
-                itemCount: _visibleTasks.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 10),
-                itemBuilder: (context, i) {
-                  final realIdx = _realIndex(i);
-                  final task = _tasks[realIdx];
-                  final leftStripe = task.isDone
-                      ? Colors.greenAccent
-                      : Theme.of(context).colorScheme.secondary;
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _tasks.isEmpty
+                ? const _EmptyState()
+                : ListView.separated(
+                    itemCount: _visibleTasks.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (context, i) {
+                      final realIdx = _realIndex(i);
+                      final task = _tasks[realIdx];
+                      final leftStripe = task.isDone
+                          ? Colors.greenAccent
+                          : Theme.of(context).colorScheme.secondary;
 
-                  return Dismissible(
-                    key: ValueKey(task),
-                    direction: DismissDirection.endToStart,
-                    background: Container(
-                      alignment: Alignment.centerRight,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(Icons.delete_outline, color: Colors.red),
-                    ),
-                    onDismissed: (_) => _deleteTask(realIdx),
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).brightness == Brightness.dark
-                            ? const Color(0xFF1A1F27)
-                            : Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border(
-                          left: BorderSide(color: leftStripe, width: 4),
+                      return Dismissible(
+                        key: ValueKey(task),
+                        direction: DismissDirection.endToStart,
+                        background: Container(
+                          alignment: Alignment.centerRight,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.delete_outline, color: Colors.red),
                         ),
-                      ),
-                      child: ListTile(
-                        leading: Checkbox(
-                          value: task.isDone,
-                          onChanged: (val) => _toggleTask(realIdx, val),
-                          shape: const CircleBorder(),
-                        ),
-                        title: Text(
-                          task.name,
-                          style: TextStyle(
-                            decoration: task.isDone
-                                ? TextDecoration.lineThrough
-                                : TextDecoration.none,
+                        onDismissed: (_) => _deleteTask(realIdx),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF1A1F27) : Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border(
+                              left: BorderSide(color: leftStripe, width: 4),
+                            ),
+                          ),
+                          child: ListTile(
+                            leading: Checkbox(
+                              value: task.isDone,
+                              onChanged: (val) => _toggleTask(realIdx, val),
+                              shape: const CircleBorder(),
+                            ),
+                            title: Text(
+                              task.name,
+                              style: TextStyle(
+                                decoration:
+                                    task.isDone ? TextDecoration.lineThrough : TextDecoration.none,
+                              ),
+                            ),
+                            trailing: IconButton(
+                              tooltip: 'Delete',
+                              icon: const Icon(Icons.delete_outline),
+                              onPressed: () => _deleteTask(realIdx),
+                            ),
                           ),
                         ),
-                        trailing: IconButton(
-                          tooltip: 'Delete',
-                          icon: const Icon(Icons.delete_outline),
-                          onPressed: () => _deleteTask(realIdx),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
+                      );
+                    },
+                  ),
       ),
 
       // Bottom input bar
@@ -283,10 +304,7 @@ class _EmptyState extends StatelessWidget {
           children: [
             const Icon(Icons.hourglass_empty, size: 48),
             const SizedBox(height: 8),
-            Text(
-              'No tasks yet',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            Text('No tasks yet', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 4),
             const Text('Add one using the bar below'),
           ],
