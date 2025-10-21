@@ -88,13 +88,56 @@ void _deleteTask(int index) {
   );
 }
 
+List<Task> get _visibleTasks {
+  switch (_filter) {
+    case TaskFilter.active:
+      return _tasks.where((t) => !t.isDone).toList();
+    case TaskFilter.done:
+      return _tasks.where((t) => t.isDone).toList();
+    case TaskFilter.all:
+    default:
+      return _tasks;
+  }
+}
+
+int _realIndex(int visibleIndex) {
+  final current = _visibleTasks[visibleIndex];
+  return _tasks.indexOf(current);
+}
 
   @override
   Widget build(BuildContext context) {
+    final chipStyle = Theme.of(context).textTheme.labelLarge?.copyWith(color: Colors.white);
     return Scaffold(
-      appBar: const AppBar(
-        title: Text('Tasks', style: TextStyle(fontWeight: FontWeight.w600)),
-      ),
+    appBar: AppBar(
+      title: const Text('Tasks', style: TextStyle(fontWeight: FontWeight.w600)),
+      actions: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: SegmentedButton<TaskFilter>(
+            style: ButtonStyle(
+              backgroundColor: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.selected)) return const Color(0xFF2A313B);
+                return const Color(0xFF1A1F27);
+              }),
+              side: WidgetStateProperty.all(BorderSide.none),
+              foregroundColor: WidgetStateProperty.all(Colors.white),
+              textStyle: WidgetStateProperty.all(chipStyle),
+            ),
+            segments: const [
+              ButtonSegment(value: TaskFilter.all, label: Text('All')),
+              ButtonSegment(value: TaskFilter.active, label: Text('Active')),
+              ButtonSegment(value: TaskFilter.done, label: Text('Done')),
+            ],
+            selected: <TaskFilter>{_filter},
+            onSelectionChanged: (sel) => setState(() => _filter = sel.first),
+            showSelectedIcon: false,
+            multiSelectionEnabled: false,
+          ),
+        ),
+      ],
+    ),
+    
       body: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
         child: _tasks.isEmpty
